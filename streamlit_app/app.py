@@ -32,7 +32,7 @@ from shared.ingestion import extract_text, chunk_text
 from shared.jina_embeddings import JinaEmbeddings
 from shared.vector_store import upsert_document, delete_document, list_active_documents
 from shared.errors import ServiceError
-from shared.config import BACKEND_URL, VAPI_PUBLIC_KEY, VAPI_ASSISTANT_ID
+from shared.config import BACKEND_URL, VAPI_PUBLIC_KEY, VAPI_ASSISTANT_ID, VAPI_SERVER_SECRET
 
 st.set_page_config(page_title="Voice RAG Assistant - Admin", layout="wide")
 
@@ -178,8 +178,12 @@ with chat_tab:
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
                 try:
+                    headers = {}
+                    if VAPI_SERVER_SECRET:
+                        headers["Authorization"] = f"Bearer {VAPI_SERVER_SECRET}"
                     response = requests.post(
                         f"{BACKEND_URL}/chat/completions",
+                        headers=headers,
                         json={
                             "model": "test",
                             "messages": st.session_state.test_chat_messages,
