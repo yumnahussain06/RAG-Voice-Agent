@@ -20,9 +20,9 @@ from typing import Optional
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
 
-from shared.config import VAPI_SERVER_SECRET, GROQ_MODEL
+from shared.config import VAPI_SERVER_SECRET, GROQ_MODEL, VAPI_PUBLIC_KEY, VAPI_ASSISTANT_ID
 from shared.errors import ServiceError
 from backend.vapi_models import ChatCompletionRequest
 from backend.rag_chain import stream_answer
@@ -61,6 +61,88 @@ def _verify_vapi_secret(authorization: Optional[str]) -> None:
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/voice", response_class=HTMLResponse)
+async def voice_page():
+    """
+    Serves the Vapi voice widget as a real, top-level page - deliberately
+    NOT embedded inside the Streamlit app's iframe. Vapi's calling engine
+    (Daily.co under the hood) uses postMessage between frames to set up
+    the call, which requires a real page origin; a nested srcdoc iframe
+    (which is what Streamlit's components.html renders into) gets a null
+    origin and breaks that handshake in an infinite connect/retry loop.
+    Opening this as its own page/tab sidesteps the problem entirely.
+    """
+    if not VAPI_PUBLIC_KEY or not VAPI_ASSISTANT_ID:
+        return HTMLResponse(
+            "<h3>Voice widget not configured.</h3>"
+            "<p>Set VAPI_PUBLIC_KEY and VAPI_ASSISTANT_ID on the backend service.</p>",
+            status_code=200,
+        )
+
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8" />
+      <title>Voice Agent</title>
+      <style>
+        body {{ font-family: sans-serif; text-align: center; padding-top: 15vh; }}
+      </style>
+    </head>
+    <body>
+      <h2>Talk to the Assistant</h2>
+      <p>Click the button in the bottom-right corner and allow microphone access.</p>
+      <div id="vapi-support-btn"></div>
+      <script>
+        (function (d, t) {{
+          var g = document.createElement(t),
+            s = d.getElementsByTagName(t)[0];
+          g.src = "https://cdn.jsdelivr.net/gh/VapiAI/html-script-tag@latest/dist/assets/index.js";
+          g.defer = true;
+          g.async = true;
+          s.parentNode.insertBefore(g, s);
+
+          g.onload = function () {{
+            window.vapiSDK.run({{
+              apiKey: "{VAPI_PUBLIC_KEY}",
+              assistant: "{VAPI_ASSISTANT_ID}",
+              config: {{
+                position: "bottom-right",
+                offset: "20px",
+                width: "60px",
+                height: "60px",
+                idle: {{
+                  color: "rgb(59, 130, 246)",
+                  type: "pill",
+                  title: "Talk to the Assistant",
+                  subtitle: "Ask about your documents",
+                  icon: "https://unpkg.com/lucide-static@0.321.0/icons/phone.svg"
+                }},
+                loading: {{
+                  color: "rgb(107, 114, 128)",
+                  type: "pill",
+                  title: "Connecting...",
+                  subtitle: "Please wait",
+                  icon: "https://unpkg.com/lucide-static@0.321.0/icons/loader-2.svg"
+                }},
+                active: {{
+                  color: "rgb(239, 68, 68)",
+                  type: "pill",
+                  title: "Call in progress...",
+                  subtitle: "Click to end",
+                  icon: "https://unpkg.com/lucide-static@0.321.0/icons/phone-off.svg"
+                }}
+              }}
+            }});
+          }};
+        }})(document, "script");
+      </script>
+    </body>
+    </html>
+    """
+    return HTMLResponse(html)
 
 
 @app.get("/logs")

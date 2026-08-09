@@ -26,13 +26,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import requests
 import streamlit as st
-import streamlit.components.v1 as components
 
 from shared.ingestion import extract_text, chunk_text
 from shared.jina_embeddings import JinaEmbeddings
 from shared.vector_store import upsert_document, delete_document, list_active_documents
 from shared.errors import ServiceError
-from shared.config import BACKEND_URL, VAPI_PUBLIC_KEY, VAPI_ASSISTANT_ID, VAPI_SERVER_SECRET
+from shared.config import BACKEND_URL, VAPI_SERVER_SECRET
 
 st.set_page_config(page_title="Voice RAG Assistant - Admin", layout="wide")
 
@@ -105,49 +104,27 @@ with docs_tab:
 
 
 # ---------------------------------------------------------------------------
-# Voice Agent tab - the actual microphone / talk-to-the-assistant widget
+# Voice Agent tab - links out to the backend's standalone /voice page
 # ---------------------------------------------------------------------------
 with voice_tab:
     st.title("Voice Agent")
     st.caption(
-        "Click the widget below and allow microphone access to have a real "
-        "voice conversation with the assistant, grounded in your indexed documents."
+        "Vapi's voice call cannot run reliably inside an embedded Streamlit "
+        "panel - it needs a real top-level browser page. Click below to open "
+        "the voice agent in a new tab instead."
     )
 
-    if not VAPI_PUBLIC_KEY or not VAPI_ASSISTANT_ID:
-        st.warning(
-            "Voice widget is not configured yet. Set VAPI_PUBLIC_KEY and "
-            "VAPI_ASSISTANT_ID in your .env (or Streamlit secrets) to enable it. "
-            "Both come from the Vapi dashboard: the public key under API Keys, "
-            "and the assistant ID under Assistants - use the assistant you "
-            "configured with Custom LLM mode pointed at this backend."
-        )
-    else:
-        # The widget is plain client-side JS/HTML (Vapi's Web Widget custom
-        # element), so it's embedded directly via components.html rather than
-        # any Python-side call - Streamlit has no native voice/mic component,
-        # this is what makes an actual mic-enabled voice UI possible here.
-        widget_html = f"""
-        <script src="https://unpkg.com/@vapi-ai/client-sdk-react/dist/embed/widget.umd.js"
-                async type="text/javascript"></script>
-        <vapi-widget
-          public-key="{VAPI_PUBLIC_KEY}"
-          assistant-id="{VAPI_ASSISTANT_ID}"
-          mode="voice"
-          theme="light"
-          size="full"
-          main-label="Talk to the Assistant"
-          start-button-text="Start Call"
-          end-button-text="End Call"
-        ></vapi-widget>
-        """
-        components.html(widget_html, height=600, scrolling=False)
+    st.info(
+        "Why a new tab: Vapi's calling engine sets up audio using "
+        "browser-to-browser messaging that requires a real page address. "
+        "Streamlit embeds components inside a sandboxed frame with no "
+        "real address, which silently breaks that setup and causes an "
+        "endless 'connecting...' loop. Opening a real page avoids this."
+    )
 
-        st.caption(
-            "This widget calls Vapi directly from your browser (voice audio "
-            "never passes through this Streamlit app) - Vapi then calls your "
-            "backend's /chat/completions for each turn, same as a phone call would."
-        )
+    voice_url = f"{BACKEND_URL}/voice"
+    st.link_button("Open Voice Agent", voice_url, use_container_width=True)
+    st.caption(f"Opens: {voice_url}")
 
 
 # ---------------------------------------------------------------------------
